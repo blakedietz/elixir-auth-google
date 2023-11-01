@@ -83,7 +83,8 @@ defmodule ElixirAuthGoogle do
     query = %{
       client_id: google_client_id(),
       scope: google_scope(),
-      redirect_uri: generate_redirect_uri(url)
+      redirect_uri: generate_redirect_uri(url),
+      access_type: "offline"
     }
 
     params = URI.encode_query(query, :rfc3986)
@@ -96,7 +97,8 @@ defmodule ElixirAuthGoogle do
     query = %{
       client_id: google_client_id(),
       scope: google_scope(),
-      redirect_uri: generate_redirect_uri(conn)
+      redirect_uri: generate_redirect_uri(conn),
+      access_type: "offline"
     }
 
     params = URI.encode_query(query, :rfc3986)
@@ -141,14 +143,31 @@ defmodule ElixirAuthGoogle do
     |> parse_body_response()
   end
 
+  def get_token_from_refresh_token(refresh_token) do
+    body =
+      Jason.encode!(%{
+        client_id: google_client_id(),
+        client_secret: google_client_secret(),
+        grant_type: "refresh_token",
+        refresh_token: refresh_token
+      })
+
+    inject_poison().post(@google_token_url, body)
+    |> parse_body_response()
+  end
+
   defp req_body(code, redirect_uri) do
-    Jason.encode!(%{
-      client_id: google_client_id(),
-      client_secret: google_client_secret(),
-      redirect_uri: redirect_uri,
-      grant_type: "authorization_code",
-      code: code
-    })
+    Jason.encode!(
+      %{
+        client_id: google_client_id(),
+        client_secret: google_client_secret(),
+        redirect_uri: redirect_uri,
+        grant_type: "authorization_code",
+        access_type: "offline",
+        code: code
+      }
+      |> Map.merge(get_request_body())
+    )
   end
 
   @doc """
@@ -206,5 +225,9 @@ defmodule ElixirAuthGoogle do
   defp get_app_callback_url do
     System.get_env("GOOGLE_CALLBACK_PATH") ||
       Application.get_env(:elixir_auth_google, :callback_path) || @default_callback_path
+  end
+
+  defp get_request_body do
+    Application.get_env(:elixir_auth_google, :request_body) || %{}
   end
 end
